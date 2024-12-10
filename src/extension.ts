@@ -2,10 +2,8 @@ import * as vscode from 'vscode';
 import { Command } from './types/commands';
 import { saveOpenFiles } from './commands/saveOpenFiles';
 
-// Array of commands
 const commands: Command[] = [
     saveOpenFiles,
-    // Add new commands here
 ];
 
 export function activate(context: vscode.ExtensionContext) {
