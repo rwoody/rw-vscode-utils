@@ -1,26 +1,79 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as fs from 'fs-extra';
+import * as path from 'path';
+import * as os from 'os';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+async function saveOpenFiles() {
+	try {
+			const defaultDir = os.homedir();
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "rwutils" is now active!');
+			const selectedUri = await vscode.window.showOpenDialog({
+					canSelectFiles: false,
+					canSelectFolders: true,
+					canSelectMany: false,
+					defaultUri: vscode.Uri.file(defaultDir),
+					openLabel: 'Select Target Directory',
+			});
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('rwutils.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from RwoodyUtils!');
-	});
+			if (!selectedUri || selectedUri.length === 0) {
+					vscode.window.showErrorMessage('No directory selected. Operation canceled.');
+					return;
+			}
 
-	context.subscriptions.push(disposable);
+			const targetDir = selectedUri[0].fsPath;
+
+			// Get workspace folders for the current VS Code instance
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+					vscode.window.showWarningMessage('No workspace folder is open.');
+					return;
+			}
+
+			const workspacePaths = workspaceFolders.map(folder => folder.uri.fsPath);
+
+			// Filter open files to include only those within the current workspace
+			const openFiles = vscode.workspace.textDocuments
+					.filter(doc => 
+							!doc.isUntitled && 
+							doc.uri.scheme === 'file' && 
+							workspacePaths.some(wsPath => doc.fileName.startsWith(wsPath)) // Check file is within the workspace
+					)
+					.map(doc => doc.fileName);
+
+			if (openFiles.length === 0) {
+					vscode.window.showWarningMessage('No valid open files to save in the current workspace.');
+					return;
+			}
+
+			await fs.ensureDir(targetDir);
+
+			for (const file of openFiles) {
+					const fileName = path.basename(file);
+					const destinationPath = path.join(targetDir, fileName);
+					await fs.copyFile(file, destinationPath);
+			}
+
+			vscode.window.showInformationMessage(`Open files saved to ${targetDir}`);
+	} catch (error) {
+			vscode.window.showErrorMessage(`Error saving files: ${error}`);
+	}
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+
+// Central command registry
+const commands: { [key: string]: (...args: any[]) => void | Promise<void> } = {
+    'rwutils.saveOpenFiles': saveOpenFiles,
+};
+
+export function activate(context: vscode.ExtensionContext) {
+    Object.keys(commands).forEach(command => {
+        const disposable = vscode.commands.registerCommand(command, commands[command]);
+        context.subscriptions.push(disposable);
+    });
+
+    vscode.window.showInformationMessage('RWoody Utilities extension is now active!');
+}
+
+export function deactivate() {
+    // Cleanup if needed
+}
